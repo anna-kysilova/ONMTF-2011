@@ -1,0 +1,45 @@
+library("ramify")
+library("blockcluster")
+library("ade4")
+
+data("binarydata")
+
+W1 <- as.matrix(dist.binary(binarydata, method = 1))
+W2 <- as.matrix(dist.binary(t(binarydata), method = 1))
+W <- matrix(0, 1100, 1100)
+W[1:1000, 1:1000] <- W1
+W[1001:1100, 1001:1100] <- W2
+binarydata1 <- 1 - binarydata
+R <- matrix(0, 1100, 1100)
+R[1001:1100, 1:1000] <- t(binarydata1)
+R[1:1000, 1001:1100] <- binarydata1
+
+km_ligne=kmeans(binarydata,centers = 2)
+km_colonne=kmeans(t(binarydata),centers = 3)
+G <- matrix(0, 1100, 5)
+G[1:1000, 1:2] <- model.matrix(~factor(km_ligne$cluster) - 1) + 0.2
+G[1001:1100, 3:5] <- model.matrix(~factor(km_colonne$cluster) - 1) + 0.2
+
+w11 <- rowSums(W)
+D <- diag(w11, nrow = 1100, ncol = 1100)
+
+G_old <- matrix(0, nrow = 1100, ncol = 5)
+i <- 0
+while (norm(G - G_old, type='F')>0.01) {
+  i = i + 1
+  l = 0.2
+  G_old <- G;
+  S = solve(t(G) %*% G) %*% t(G) %*% R %*% G %*% solve(t(G) %*% G);
+  Lambda = t(G) %*% R %*% G %*% S - t(G) %*% G %*% S %*% t(G) %*% G %*% S + l * t(G) %*% W %*% G;
+  A1 = R %*% G %*% S + l * W %*% G;
+  A2 = G %*% S %*% t(G)  %*% G %*% S + D%*% G %*% Lambda;
+  G = G * (A1 / (A2 + 1e-8))**(1/4);
+}
+
+AM1 <- argmax(G[1:1000, 1:2])
+AM2 <- argmax(G[1001:1100, 3:5])
+
+image(t(binarydata),xaxt='n',yaxt='n',main='ORIGINAL DATA')
+data_triees <- binarydata[sort(AM1,index.return=TRUE)$ix,
+                          sort(AM2,index.return=TRUE)$ix]
+image(t(data_triees),xaxt='n',yaxt='n',main='O-NMTF')
